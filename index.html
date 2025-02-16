@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Amazon Product-Type Schema (Variation)</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    html, body {
+      min-height: 100%;
+      background-color: #ffffff;
+      display: flex;
+      flex-direction: column;
+    }
+    .container {
+      max-width: 1400px;
+      width: 100%;
+      margin: auto;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 2rem;
+      margin-bottom: 1.5rem;
+      color: #000;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    #productType {
+      flex: 1;
+      padding: 0.75rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      color: #333;
+    }
+    #fetchBtn {
+      flex: 0 0 auto;
+      padding: 0.75rem 1.25rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background-color: #000; 
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    #fetchBtn:hover:enabled {
+      background-color: #444;
+    }
+    #fetchBtn:disabled {
+      background-color: #888;
+      cursor: not-allowed;
+    }
+
+    #errorMsg {
+      margin-top: 0.5rem;
+      color: rgb(255, 255, 255);
+      font-weight: bold;
+      background-color: #a04b4b;
+      display: none; 
+      padding: 0.5rem;
+      border-radius: 6px;
+    }
+
+    #searchBar {
+      display: none;
+      margin: 2rem 0 1rem;
+      background-color: #fafafa;
+      border: 1px solid #ddd;
+      padding: 1rem;
+      border-radius: 6px;
+    }
+    #searchBar label {
+      font-weight: 600;
+      margin-right: 0.5rem;
+      color: #333;
+    }
+    #searchInput {
+      padding: 0.75rem;
+      font-size: 1rem;
+      flex: 1;
+      border: 1px solid #d3d3d3;
+      border-radius: 6px;
+      color: #333;
+      width: 700px;
+    }
+    #searchInfo {
+      margin-top: 1rem;
+      font-style: italic;
+      color: #555;
+    }
+
+    #schemaWrapper {
+      margin-top: 2rem;
+      border-top: 1px solid #ddd;
+      padding-top: 2rem;
+    }
+
+    ul.schemaTree {
+      list-style: none;
+      margin-left: 0;
+      padding-left: 0;
+    }
+    ul.schemaTree li {
+      margin-bottom: 1rem;
+      background-color: #fcfcfc;
+      border: 1px solid #eee;
+      border-radius: 6px;
+      position: relative;
+      padding: 1rem;
+
+      border-top: 6px solid #000000;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    ul.schemaTree li li {
+      border-top: 4px solid #8a9195; 
+    }
+    ul.schemaTree li ul.schemaTree {
+      margin-top: 1rem;
+      margin-left: 2rem;
+      padding-left: 0;
+    }
+
+    .schemaLabel {
+      display: block;
+      font-weight: 700;
+      color: #000;
+      margin-bottom: 0.25rem;
+      font-size: 1.1rem;
+    }
+    .reqBadge {
+      color: #FF4C4C;
+      margin-left: 0.3rem;
+    }
+    .titleSpan {
+      font-style: italic;
+      color: #555;
+      margin-left: 0.5rem;
+      font-weight: 400;
+      font-size: 1rem;
+    }
+    .description {
+      margin-top: 0.3rem;
+      color: #444;
+      font-size: 0.95rem;
+    }
+    .constraintInfo {
+      margin-top: 0.3rem;
+      color: #666;
+      font-size: 0.9rem;
+    }
+    .enumValues {
+      margin-top: 0.3rem;
+      color: #444;
+      font-size: 0.9rem;
+    }
+    .exampleValues {
+      margin-top: 0.3rem;
+      font-style: italic;
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    ul.schemaTree li:hover {
+      background-color: #f0faff;
+      border-color: #000000;
+      transition: all 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Amazon Product-Type Schema</h1>
+
+    <div class="row">
+      <input
+        type="text"
+        id="productType"
+        placeholder="E.g. LUGGAGE"
+        autocomplete="off"
+      />
+      <button id="fetchBtn">Get Schema</button>
+    </div>
+
+    <div id="errorMsg">Error: Could not find schema.</div>
+
+    <!-- Search bar -->
+    <div id="searchBar">
+      <label for="searchInput">Search:</label>
+      <input 
+        type="text" 
+        id="searchInput" 
+        placeholder="Search attributes, descriptions & enums."
+      />
+      <div id="searchInfo"></div>
+    </div>
+
+    <!-- Schema area -->
+    <div id="schemaWrapper"></div>
+  </div>
+
+  <script>
+
+    const productTypeInput = document.getElementById("productType");
+    const fetchBtn         = document.getElementById("fetchBtn");
+    const errorMsg         = document.getElementById("errorMsg");
+    const searchBar        = document.getElementById("searchBar");
+    const searchInput      = document.getElementById("searchInput");
+    const searchInfo       = document.getElementById("searchInfo");
+    const schemaWrapper    = document.getElementById("schemaWrapper");
+
+    let rootSchema    = null;
+    let finalTreeData = null;
+
+    productTypeInput.addEventListener("input", (e) => {
+      const sanitized = e.target.value.replace(/[^a-zA-Z0-9_]/g, '');
+      e.target.value = sanitized.toUpperCase();
+    });
+    fetchBtn.addEventListener("click", handleFetch);
+    searchInput.addEventListener("input", handleSearch);
+
+    async function handleFetch() {
+      schemaWrapper.innerHTML = "";
+      searchBar.style.display = "none";
+      errorMsg.style.display = "none";
+
+      fetchBtn.textContent = "Loading...";
+      fetchBtn.disabled = true;
+
+      const productType = productTypeInput.value.trim() || "LUGGAGE";
+
+      try {
+
+        const myHeaders = new Headers();
+        myHeaders.append("Content-Type", "application/json");
+        myHeaders.append("Authorization", "Bearer b2817d1438d24ab69c1c969d1ca278cd");
+
+        const rawBody = JSON.stringify({ ProductType: productType });
+        const requestOptions = {
+          method: "POST",
+          headers: myHeaders,
+          body: rawBody,
+          redirect: "follow"
+        };
+
+        const response1 = await fetch(
+          "https://api.iaqa.staging.integrator.io/v1/exports/67af587b3562eb9ed12a0a20/invoke",
+          requestOptions
+        );
+
+        const data1 = await response1.json();
+
+        const schemaLink = data1?.data?.[0]?.schema?.link?.resource;
+        const productTypeNotFound = data1.errors?.some(e => e.message.includes('"code": "NOT_FOUND"'))
+
+        if (productTypeNotFound) {
+          throw new Error("Product Type not found.");
+        }
+
+        if (!response1.ok) {
+          throw new Error("First fetch failed: " + response1.statusText);
+        }
+
+        if (!schemaLink) {
+          throw new Error("No schema link found in the first response.");
+        }
+
+        const response2 = await fetch(schemaLink);
+        if (!response2.ok) {
+          throw new Error("Failed to fetch schema: " + response2.statusText);
+        }
+        rootSchema = await response2.json();
+        if (!rootSchema) {
+          throw new Error("No schema returned from second response.");
+        }
+
+        const refsMap = collectDefs(rootSchema);
+        const merged  = normalizeSchema(rootSchema, refsMap);
+
+        finalTreeData = buildTreeData(merged, "root");
+
+        renderTree(finalTreeData, schemaWrapper);
+
+        searchBar.style.display = "block";
+        searchInfo.textContent = "Type to filter. Clear to see all again.";
+      }
+      catch (err) {
+        console.error(err);
+        errorMsg.textContent = "Error: " + err.message;
+        errorMsg.style.display = "block";
+      }
+      finally {
+        fetchBtn.textContent = "Get Schema";
+        fetchBtn.disabled = false;
+      }
+    }
+
+    function collectDefs(schema) {
+      const map = {};
+      if (schema.$defs && typeof schema.$defs === "object") {
+        for (let defName of Object.keys(schema.$defs)) {
+          map[`#/\\$defs/${defName}`] = schema.$defs[defName];
+        }
+      }
+      if (schema.definitions && typeof schema.definitions === "object") {
+        for (let defName of Object.keys(schema.definitions)) {
+          map[`#/definitions/${defName}`] = schema.definitions[defName];
+        }
+      }
+      return map;
+    }
+
+    function normalizeSchema(schema, refsMap) {
+      if (!schema || typeof schema !== "object") return schema;
+
+      if (typeof schema.$ref === "string") {
+        const refKey = schema.$ref.replace(/~1/g, "/");
+        const target = resolveRef(refKey, refsMap);
+        if (target) {
+          let expanded = normalizeSchema(target, refsMap);
+          let localCopy = { ...schema };
+          delete localCopy.$ref;
+          expanded = deepMerge(expanded, localCopy);
+          return normalizeSchema(expanded, refsMap);
+        }
+      }
+
+      if (Array.isArray(schema.allOf)) {
+        let base = {};
+        schema.allOf.forEach(sub => {
+          const norm = normalizeSchema(sub, refsMap);
+          base = deepMerge(base, norm);
+        });
+        const copy = { ...schema };
+        delete copy.allOf;
+        base = deepMerge(base, copy);
+        return normalizeSchema(base, refsMap);
+      }
+
+      if (Array.isArray(schema.oneOf)) {
+        schema.oneOf = schema.oneOf.map(s => normalizeSchema(s, refsMap));
+      }
+      if (Array.isArray(schema.anyOf)) {
+        schema.anyOf = schema.anyOf.map(s => normalizeSchema(s, refsMap));
+      }
+
+      const out = { ...schema };
+      if (out.properties && typeof out.properties === "object") {
+        for (let p of Object.keys(out.properties)) {
+          out.properties[p] = normalizeSchema(out.properties[p], refsMap);
+        }
+      }
+      if (out.type === "array" && out.items) {
+        if (Array.isArray(out.items)) {
+          out.items = out.items.map(i => normalizeSchema(i, refsMap));
+        } else {
+          out.items = normalizeSchema(out.items, refsMap);
+        }
+      }
+      return out;
+    }
+
+    function resolveRef(refKey, refsMap) {
+      if (refsMap[refKey]) {
+        return refsMap[refKey];
+      }
+      return null;
+    }
+
+    function deepMerge(base, extra) {
+      if (!base || typeof base !== "object") return extra;
+      if (!extra || typeof extra !== "object") return base;
+      const merged = { ...base };
+      for (let k of Object.keys(extra)) {
+        if (
+          k in merged &&
+          typeof merged[k] === "object" &&
+          typeof extra[k] === "object" &&
+          !Array.isArray(merged[k]) &&
+          !Array.isArray(extra[k])
+        ) {
+          merged[k] = deepMerge(merged[k], extra[k]);
+        } else {
+          merged[k] = extra[k];
+        }
+      }
+      return merged;
+    }
+
+    function buildTreeData(schema, key = "", parentRequired = []) {
+      if (!schema || typeof schema !== "object") {
+        return {
+          key,
+          isRequired: parentRequired.includes(key),
+          title: null,
+          description: null,
+          typeInfo: null,
+          enumValues: null,
+          examples: null,
+          minLength: null,
+          maxLength: null,
+          pattern: null,
+          format: null,
+          children: []
+        };
+      }
+
+      const title       = (typeof schema.title === "string") ? schema.title : null;
+      const description = (typeof schema.description === "string") ? schema.description : null;
+      const typeInfo    = (typeof schema.type === "string")  ? schema.type  : null;
+      const enumValues  = Array.isArray(schema.enum)         ? schema.enum  : null;
+      const examples    = Array.isArray(schema.examples)     ? schema.examples : null;
+      const minLength   = (typeof schema.minLength === "number") ? schema.minLength : null;
+      const maxLength   = (typeof schema.maxLength === "number") ? schema.maxLength : null;
+      const pattern     = (typeof schema.pattern === "string") ? schema.pattern : null;
+      const format      = (typeof schema.format === "string")  ? schema.format : null;
+
+      let thisRequired = Array.isArray(schema.required) ? schema.required : [];
+      let children = [];
+
+      if (schema.properties && typeof schema.properties === "object") {
+        for (let propKey of Object.keys(schema.properties)) {
+          let child = buildTreeData(schema.properties[propKey], propKey, thisRequired);
+          children.push(child);
+        }
+      }
+      if (typeInfo === "array" && schema.items) {
+        if (Array.isArray(schema.items)) {
+          schema.items.forEach((it, idx) => {
+            let c = buildTreeData(it, `items[${idx}]`, []);
+            children.push(c);
+          });
+        } else {
+          let c = buildTreeData(schema.items, "items", []);
+          children.push(c);
+        }
+      }
+      if (Array.isArray(schema.oneOf)) {
+        schema.oneOf.forEach((sub, i) => {
+          children.push(buildTreeData(sub, `oneOf[${i}]`, []));
+        });
+      }
+      if (Array.isArray(schema.anyOf)) {
+        schema.anyOf.forEach((sub, i) => {
+          children.push(buildTreeData(sub, `anyOf[${i}]`, []));
+        });
+      }
+
+      return {
+        key,
+        isRequired: parentRequired.includes(key),
+        title,
+        description,
+        typeInfo,
+        enumValues,
+        examples,
+        minLength,
+        maxLength,
+        pattern,
+        format,
+        children
+      };
+    }
+
+    function renderTree(rootNode, container) {
+      container.innerHTML = "";
+      const ul = document.createElement("ul");
+      ul.classList.add("schemaTree");
+
+      if (rootNode.key === "root") {
+        rootNode.children.forEach(child => buildLi(child, ul));
+      } else {
+        buildLi(rootNode, ul);
+      }
+      container.appendChild(ul);
+    }
+
+    function buildLi(node, parentUl) {
+      const li = document.createElement("li");
+
+      let textParts = [
+        node.key,
+        node.title || "",
+        node.description || "",
+        (node.enumValues || []).join(" "),
+        (node.examples || []).join(" ")
+      ];
+      if (node.pattern) textParts.push(node.pattern);
+      if (node.format)  textParts.push(node.format);
+
+      li.dataset.searchText = textParts.join(" ").toLowerCase();
+
+      const label = document.createElement("span");
+      label.classList.add("schemaLabel");
+      label.textContent = node.key || "(root)";
+      li.appendChild(label);
+
+      if (node.isRequired) {
+        const r = document.createElement("span");
+        r.classList.add("reqBadge");
+        r.textContent = "*";
+        label.appendChild(r);
+      }
+
+      if (node.title) {
+        const tSpan = document.createElement("span");
+        tSpan.classList.add("titleSpan");
+        tSpan.textContent = `(${node.title})`;
+        label.appendChild(tSpan);
+      }
+
+      if (node.description) {
+        const descDiv = document.createElement("div");
+        descDiv.classList.add("description");
+        descDiv.textContent = node.description;
+        li.appendChild(descDiv);
+      }
+
+      if (node.typeInfo) {
+        const cDiv = document.createElement("div");
+        cDiv.classList.add("constraintInfo");
+        cDiv.textContent = `Type: ${node.typeInfo}`;
+        li.appendChild(cDiv);
+      }
+
+      const constraints = [];
+      if (node.minLength !== null) constraints.push(`minLength=${node.minLength}`);
+      if (node.maxLength !== null) constraints.push(`maxLength=${node.maxLength}`);
+      if (node.pattern) constraints.push(`pattern=${node.pattern}`);
+      if (node.format) constraints.push(`format=${node.format}`);
+      if (constraints.length > 0) {
+        const co = document.createElement("div");
+        co.classList.add("constraintInfo");
+        co.textContent = constraints.join(", ");
+        li.appendChild(co);
+      }
+
+      if (node.enumValues) {
+        const e = document.createElement("div");
+        e.classList.add("enumValues");
+        e.textContent = "enum: " + node.enumValues.join(", ");
+        li.appendChild(e);
+      }
+
+      if (node.examples) {
+        const ex = document.createElement("div");
+        ex.classList.add("exampleValues");
+        ex.textContent = "Example(s): " + node.examples.join(", ");
+        li.appendChild(ex);
+      }
+
+      if (node.children && node.children.length > 0) {
+        const subUl = document.createElement("ul");
+        subUl.classList.add("schemaTree");
+        node.children.forEach(ch => buildLi(ch, subUl));
+        li.appendChild(subUl);
+      }
+
+      parentUl.appendChild(li);
+    }
+
+    function handleSearch() {
+      const term = searchInput.value.trim().toLowerCase();
+      const allLi = schemaWrapper.querySelectorAll("li");
+      if (!term) {
+        allLi.forEach(li => (li.style.display = ""));
+        searchInfo.textContent = "Showing all.";
+        return;
+      }
+      allLi.forEach(li => (li.style.display = "none"));
+
+      const matched = [];
+      allLi.forEach(li => {
+        const txt = li.dataset.searchText || "";
+        if (txt.includes(term)) {
+          matched.push(li);
+        }
+      });
+
+      for (let li of matched) {
+        li.style.display = "";
+
+        let current = li.parentElement;
+        while (current && current !== schemaWrapper) {
+          if (current.tagName === "LI") {
+            current.style.display = "";
+          }
+          current = current.parentElement;
+        }
+
+        showDescendants(li);
+      }
+      searchInfo.textContent = `${matched.length} matching node(s) found.`;
+    }
+
+    function showDescendants(li) {
+      const queue = [li];
+      while (queue.length) {
+        const node = queue.shift();
+        node.style.display = "";
+        const subUl = node.querySelector("ul");
+        if (subUl) {
+          Array.from(subUl.children).forEach(childLi => queue.push(childLi));
+        }
+      }
+    }
+  </script>
+</body>
+</html>
