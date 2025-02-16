@@ -245,7 +245,7 @@
 
         const myHeaders = new Headers();
         myHeaders.append("Content-Type", "application/json");
-        myHeaders.append("Authorization", "Bearer b2817d1438d24ab69c1c969d1ca278cd");
+        myHeaders.append("x-celigo-api-key", "82d73390-c78d-407d-b2b7-06b51572fe5b");
 
         const rawBody = JSON.stringify({ ProductType: productType });
         const requestOptions = {
@@ -256,7 +256,7 @@
         };
 
         const response1 = await fetch(
-          "https://api.iaqa.staging.integrator.io/v1/exports/67af587b3562eb9ed12a0a20/invoke",
+          "https://production-charan.gateway.apim.staging.integrator.io/AmazonProductType",
           requestOptions
         );
 
